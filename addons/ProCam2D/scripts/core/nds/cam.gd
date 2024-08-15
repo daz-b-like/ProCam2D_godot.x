@@ -169,13 +169,17 @@ func _setup_camera() -> void:
 		_camera.make_current()
 
 func _reparent_camera() -> void:
-	var first_node = owner
+	var root = get_tree().get_root()
+	var children = root.get_child_count()
+	var first_node = root.get_child(children - 1)
 	if first_node != self:
 		var current_parent = get_parent()
 		if current_parent:
 			current_parent.remove_child(self)
 		first_node.add_child(self)
 		set_owner(first_node)
+	else:
+		print("error setting up procam. Can't be root node!")
 
 func _update_limits() -> void:
 	_camera.limit_left = left_limit
