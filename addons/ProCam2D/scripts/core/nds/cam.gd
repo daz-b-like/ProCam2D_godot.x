@@ -3,8 +3,6 @@ extends "b.gd"
 
 const GROUP_NAME: = "procam"
 
-# Enums
-
 enum FollowMode {
 	SINGLE_TARGET,
 	MULTI_TARGET
@@ -17,12 +15,10 @@ enum DragType {
 	SPRING_DAMP,
 }
 
-#signals
 signal cinematic_started(cinematic_id)
 signal cinematic_stopped(cinematic_id)
 signal addon_message(message)
 
-#variables
 var follow_mode = FollowMode.SINGLE_TARGET: set = set_follow_mode
 var drag_type = DragType.SMOOTH_DAMP: set = set_drag_type
 var smooth_drag: bool = true: set = set_smooth_drag
@@ -57,7 +53,6 @@ var working_radius := 2000.0
 var global_debug_draw := false: set = set_global_debug_draw
 @export var addons: Array[PCamAddon] = []
 
-# Private variables
 var _cell_size := 8000.0
 var _global_debug_draw: bool
 var _target_offset: Vector2 = Vector2.ZERO
@@ -105,7 +100,6 @@ func _ready() -> void:
 	_gather_influence_nodes()
 	_setup_addons()
 	_setup_spatial_hash()
-	check_camera_priority()
 	_setup_camera()
 
 func _setup_spatial_hash():
@@ -141,14 +135,6 @@ func _get_nearby_nodes(position, radius):
 						nearby_nodes.append(node)
 	
 	return nearby_nodes
-
-func check_camera_priority():
-	var cameras = _get_nodes_in_group("procam")
-	if cameras.size() > 0:
-		for camera in cameras:
-			camera.enabled = (camera == cameras[0])
-	else:
-		enabled = true
 
 func _init_camera() -> void:
 	_camera = Camera2D.new()
@@ -200,7 +186,7 @@ func _gather_influence_nodes() -> void:
 		if not node.is_connected("position_changed", Callable(self, "_on_node_position_changed")):
 			node.connect("position_changed", Callable(self, "_on_node_position_changed"))
 			node.connect("tree_left", Callable( self, "on_node_exited"))
-	for node in _get_nodes_in_group("procam_targets") + _get_nodes_in_group("procam_rooms") + _get_nodes_in_group("procam_magnets") + _get_nodes_in_group("procam_zooms") + _get_nodes_in_group("procam_paths") + _get_nodes_in_group("procam_cinematics"):
+	for node in _get_nodes_in_group("procam_targets") + _rooms + _magnets + _zooms + _paths + _cinematics:
 		if not is_connected("debug_draw_changed", Callable(node, "change_debug")):
 			connect("debug_draw_changed", Callable(node, "change_debug"))
 			node.debug_draw = _global_debug_draw
@@ -232,35 +218,37 @@ func _update(delta: float) -> void:
 		return
 	_update_targets(delta)
 	_apply_influences()
-	_apply_addons_by_stage("pre_process", delta) # Pre-processing addons
+	_apply_addons_by_stage("pre_process", delta)
 	_update_offset(delta)
 	_update_position(delta)
 	_update_rotation(delta)
 	_update_zoom(delta)
-	_apply_addons_by_stage("post_smoothing", delta) # Post-smoothing addons
+	_apply_addons_by_stage("post_smoothing", delta)
 	_update_limits()
 	_apply_limits()
-	_apply_addons_by_stage("final_adjust", delta) # Final adjustment addons
+	_apply_addons_by_stage("final_adjust", delta)
 	_apply_transforms()
 	
 func _apply_limits():
-	#position limits
+	# max distance limits
 	if not _playing_cinematic:
 		_current_position.x = clamp(_current_position.x, _target_position.x - max_distance.x, _target_position.x + max_distance.x)
 		_current_position.y = clamp(_current_position.y, _target_position.y - max_distance.y, _target_position.y + max_distance.y)
-	_current_position = PCamUtils.clamp_point_inside_rect(_current_position, _calculate_limit_rect()[1])
-	#zoom limits
-	var limit_rect = _calculate_limit_rect()[2]
+	# limits clamping
+	_current_position.x = clamp(_current_position.x, left_limit + (_viewport_size/2).x/_current_zoom, right_limit - (_viewport_size/2).x/_current_zoom)
+	_current_position.y = clamp(_current_position.y, top_limit + (_viewport_size/2).y/_current_zoom, bottom_limit - (_viewport_size/2).y/_current_zoom)
+	# zoom limits
+	var limit_rect = _calculate_limit_rect()
 	var zoom_limit = max(_viewport_size.y / limit_rect.size.y, _viewport_size.x / limit_rect.size.x)
 	_current_zoom  = clamp(_current_zoom, zoom_limit, INF)
 
 func _update_targets(delta) -> void:
 	_viewport_size = get_viewport_rect().size
-	_nearby_nodes = _get_nearby_nodes(global_position, 2000)
+	_nearby_nodes = _get_nearby_nodes(global_position, working_radius)
 	_targets.clear()
 	for target in _get_nodes_in_group("procam_targets"):
 		if target.enabled:
-			if not target.disable_outside_limits or (target.disable_outside_limits and _calculate_limit_rect()[2].has_point(to_local(target.global_position))):
+			if not target.disable_outside_limits or (target.disable_outside_limits and _calculate_limit_rect().has_point(to_local(target.global_position))):
 				target._update_velocity(delta)
 				_targets.append(target)
 	_target_rotation = _calculate_target_rotation()
@@ -288,10 +276,11 @@ func _update_offset(delta: float) -> void:
 		_current_offset = _target_offset
 
 func _update_position(delta: float) -> void:
-	var target_position = _target_position
+	var target_position = _target_position + _current_offset
 	
 	if smooth_limit:
-		target_position = PCamUtils.clamp_point_inside_rect(target_position, _calculate_limit_rect()[1])
+		target_position.x = clamp(target_position.x, left_limit + (_viewport_size/2).x/_current_zoom, right_limit - (_viewport_size/2).x/_current_zoom)
+		target_position.y = clamp(target_position.y, top_limit + (_viewport_size/2).y/_current_zoom, bottom_limit - (_viewport_size/2).y/_current_zoom)
 	
 	if smooth_drag:
 		match drag_type:
@@ -436,9 +425,9 @@ func _apply_deadzones(target_position: Vector2) -> Vector2:
 				   camera_movement.y if use_v_margins else target_position.y)
 
 func _apply_transforms() -> void:
-	global_position = _current_position + _current_offset
+	global_position = _current_position
 	global_rotation = _current_rotation
-	_camera.zoom = Vector2(_current_zoom,_current_zoom) #(+ Vector2.ONE*2) #uncomment for debugging
+	_camera.zoom = Vector2(_current_zoom,_current_zoom)
 
 func _calculate_deadzone_rect() -> Rect2:
 	var size = _viewport_size / _current_zoom
@@ -458,12 +447,10 @@ func _calculate_deadzone_rect() -> Rect2:
 	)
 	return rect
 
-func _calculate_limit_rect() -> Array:
-	var limit_rect_pos = to_local(Vector2(left_limit, top_limit))
+func _calculate_limit_rect() -> Rect2:
+	var limit_rect_pos = Vector2(left_limit - global_position.x, top_limit - global_position.y)
 	var limit_rect_size = Vector2(right_limit - left_limit, bottom_limit - top_limit)
-	return [Rect2(limit_rect_pos + Vector2.ONE, limit_rect_size - Vector2.ONE), 
-			Rect2(to_global(limit_rect_pos) + (_viewport_size/_current_zoom)/2, limit_rect_size - _viewport_size/_current_zoom),
-			Rect2(limit_rect_pos , limit_rect_size)]
+	return Rect2(limit_rect_pos , limit_rect_size)
 
 func _calculate_target_position() -> Vector2:
 	if _playing_cinematic:
@@ -588,11 +575,12 @@ func _draw_debug() -> void:
 		draw_rect(drag_rect, debug_color[0], false, 1)
 	
 	# Draw camera limits rect
-	var limit_rect = _calculate_limit_rect()[0]
-	draw_line(limit_rect.position, limit_rect.position + Vector2(limit_rect.size.x, 0).rotated(-global_rotation), debug_color[0])
-	draw_line(limit_rect.position, limit_rect.position + Vector2(0, limit_rect.size.y).rotated(-global_rotation), debug_color[0])
-	draw_line(limit_rect.position + Vector2(limit_rect.size.x, 0).rotated(-global_rotation), limit_rect.position + limit_rect.size.rotated(-global_rotation), debug_color[0])
-	draw_line(limit_rect.position + Vector2(0, limit_rect.size.y).rotated(-global_rotation), limit_rect.position + limit_rect.size.rotated(-global_rotation), debug_color[0])
+	var limit_rect_pos = Vector2(left_limit - global_position.x, top_limit - global_position.y)
+	var limit_rect_size = Vector2(right_limit - left_limit, bottom_limit - top_limit)
+	draw_line(limit_rect_pos, limit_rect_pos + Vector2(limit_rect_size.x, 0), debug_color[0])
+	draw_line(limit_rect_pos, limit_rect_pos + Vector2(0, limit_rect_size.y), debug_color[0])
+	draw_line(limit_rect_pos + Vector2(limit_rect_size.x, 0), limit_rect_pos + limit_rect_size, debug_color[0])
+	draw_line(limit_rect_pos + Vector2(0, limit_rect_size.y), limit_rect_pos + limit_rect_size, debug_color[0])
 
 # Public methods
 func reset_camera():

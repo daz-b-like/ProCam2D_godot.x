@@ -86,9 +86,9 @@ func post_smoothing(camera, delta):
 
 	var shake_factor = pow(_current_trauma, 2)  # Quadratic falloff for trauma
 
-	var offset = Vector2.ZERO
-	var rotation_offset = 0.0
-	var zoom_offset = 0.0
+	var offset := Vector2.ZERO
+	var rotation_offset := 0.0
+	var zoom_offset := 0.0
 
 	if shake_type & (1 << ShakeType.VERTICAL):
 		offset.y += _calculate_offset(_time_elapsed * speed) * intensity * shake_factor
@@ -105,9 +105,10 @@ func post_smoothing(camera, delta):
 	if shake_type & (1 << ShakeType.ZOOM):
 		zoom_offset = _calculate_zoom_offset() * shake_factor
 
-	camera._current_position += offset
-	camera._current_rotation = _initial_rotation + rotation_offset / 500.0
+	camera._current_rotation = _initial_rotation + rotation_offset
 	camera._current_zoom += zoom_offset
+	camera._current_position += offset
+
 
 	# Stop conditions
 	if not endless:
@@ -181,7 +182,7 @@ func _calculate_circular_offset() -> Vector2:
 	return Vector2(cos(angle), sin(angle)) * radius
 
 func _calculate_rotation_offset() -> float:
-	return sin(_time_elapsed * speed) * intensity
+	return sin(_time_elapsed * speed) * intensity / 500.0
 
 func _calculate_zoom_offset() -> float:
 	return sin(_time_elapsed * speed * 10) * intensity / 2000  # Reduced zoom intensity
