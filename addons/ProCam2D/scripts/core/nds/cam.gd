@@ -131,7 +131,7 @@ func _get_nearby_nodes(position, radius):
 			var check_cell = center_cell + Vector2(x, y)
 			if _spatial_hash.has(check_cell):
 				for node in _spatial_hash[check_cell]:
-					if node.global_position.distance_to(position) <= radius:
+					if is_instance_valid(node) and node.global_position.distance_to(position) <= radius:
 						nearby_nodes.append(node)
 	
 	return nearby_nodes
@@ -185,6 +185,7 @@ func _gather_influence_nodes() -> void:
 	for node in _rooms + _magnets + _zooms:
 		if not node.is_connected("position_changed", Callable(self, "_on_node_position_changed")):
 			node.connect("position_changed", Callable(self, "_on_node_position_changed"))
+		if not node.is_connected("tree_left", Callable( self, "on_node_exited")):
 			node.connect("tree_left", Callable( self, "on_node_exited"))
 	for node in _get_nodes_in_group("procam_targets") + _rooms + _magnets + _zooms + _paths + _cinematics:
 		if not is_connected("debug_draw_changed", Callable(node, "change_debug")):
