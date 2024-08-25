@@ -323,6 +323,9 @@ func _on_scene_changed():
 		var cam_g = get_tree().get_nodes_in_group("procam")
 		if not cam_g.is_empty():
 			cam = cam_g[0]
+			var old_pcam_nodes : Array = cam._cinematics + cam._rooms + cam._paths + cam._zooms + cam._magnets
 			cam._gather_influence_nodes()
-			cam._setup_spatial_hash()
+			var new_pcam_nodes : Array = cam._cinematics + cam._rooms + cam._paths + cam._zooms + cam._magnets
+			if old_pcam_nodes.size() != new_pcam_nodes.size():
+				cam._setup_spatial_hash()
 		else: cam = null
