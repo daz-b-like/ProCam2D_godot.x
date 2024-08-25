@@ -323,4 +323,6 @@ func _on_scene_changed():
 		var cam_g = get_tree().get_nodes_in_group("procam")
 		if not cam_g.is_empty():
 			cam = cam_g[0]
+			cam._gather_influence_nodes()
+			cam._setup_spatial_hash()
 		else: cam = null
