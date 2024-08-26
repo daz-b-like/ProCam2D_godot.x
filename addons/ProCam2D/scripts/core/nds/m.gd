@@ -102,7 +102,7 @@ func apply_influence(pos) -> Vector2:
 	else:
 		if magnet_shape == MagnetShape.CIRCLE:
 			# Use the original force and falloff calculations
-			var force_magnitude = force * falloff_curve.interpolate(distance / radius)
+			var force_magnitude = force * falloff_curve.sample(distance / radius)
 			var max_displacement = distance if attract_repel == AttractRepel.ATTRACT else radius - distance
 			var actual_displacement = min(force_magnitude.length(), max_displacement)
 			return pos + force_direction * actual_displacement
@@ -122,7 +122,7 @@ func apply_influence(pos) -> Vector2:
 			var distance_from_edge = edge_distance.length()
 			
 			# Calculate force magnitude using the falloff curve
-			var force_magnitude = force * falloff_curve.interpolate(distance_factor)
+			var force_magnitude = force * falloff_curve.sample(distance_factor)
 			
 			var displacement_vector
 			
